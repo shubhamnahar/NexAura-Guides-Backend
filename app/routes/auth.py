@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import timedelta
 
 from .. import database, models, auth
-from ..schemas import UserCreate # We'll define this in schemas.py
+from ..schemas import UserCreate
 
 router = APIRouter()
 

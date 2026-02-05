@@ -8,6 +8,7 @@ import {
 } from "./locatorStrategies.js";
 import { scoreCandidate } from "./scoreMatch.js";
 import { visionFindElement } from "../vision/visionFallback.js";
+import { findTargetElement } from "./hybridSelector.js";
 
 const DEFAULT_TIMEOUT = 8000;
 const DEFAULT_RETRIES = 3;
@@ -73,6 +74,18 @@ function resolveInFrame(frame, target, debug) {
       candidates.push({ el, score, why });
     });
   };
+
+  // Primary attempt: hybrid selector scoring based on fingerprint
+  if (target.hybridFingerprint) {
+    const el = findTargetElement(target.hybridFingerprint, {
+      root: win.document,
+      threshold: 60,
+    });
+    if (el) {
+      candidates.push({ el, score: 100, why: "hybridSelector" });
+      return { el, frame };
+    }
+  }
 
   for (const loc of locators) {
     if (!loc || !loc.type) continue;

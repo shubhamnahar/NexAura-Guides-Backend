@@ -23,6 +23,8 @@ export function buildEmptyStepTarget() {
       attrs: {},
       classTokens: [],
     },
+    // Hybrid selector fingerprint (text/context/visuals) for robust replay
+    hybridFingerprint: null,
     context: {
       ancestorTrail: [],
       siblingIndex: null,

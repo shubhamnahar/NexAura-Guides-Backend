@@ -1,4 +1,5 @@
 import { normalizeText } from "../guideSchema.js";
+import { generateElementFingerprint } from "../locatorEngine/hybridSelector.js";
 
 export function captureTarget(element, frameInfo = {}) {
   if (!(element instanceof Element)) return null;
@@ -38,6 +39,7 @@ export function captureTarget(element, frameInfo = {}) {
   return {
     preferredLocators: locatorList,
     fingerprint,
+    hybridFingerprint: generateElementFingerprint(element),
     context: {
       ancestorTrail,
       siblingIndex,
