@@ -366,6 +366,21 @@ async def create_guide(
                 json.dump(rich_steps_payload, f)
         except Exception as e:
             print("Warning: failed to persist rich step metadata", e)
+
+        # Hydrate rich fields back into response so caller gets full data immediately
+        try:
+            for step in db_guide.steps or []:
+                payload = rich_steps_payload.get(step.step_number) or rich_steps_payload.get(
+                    str(step.step_number)
+                )
+                if not payload:
+                    continue
+                if "action" in payload:
+                    step.action = payload.get("action")
+                if "target" in payload:
+                    step.target = payload.get("target")
+        except Exception as e:
+            print("Warning: failed to hydrate rich step metadata into response", e)
         return db_guide
 
     except Exception as e:
