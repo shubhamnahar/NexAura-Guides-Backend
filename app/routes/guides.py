@@ -114,9 +114,6 @@ async def export_guide_pdf(
         for step in steps:
             write_line(f"Step {step.step_number}: {step.instruction}")
             selector = step.selector or ""
-            write_line(f"  Selector:")
-            for i in range(0, len(selector), max_chars):
-                write_line("    " + selector[i : i + max_chars])
 
             # If there is a screenshot, embed it
             if step.screenshot_path and os.path.exists(step.screenshot_path):
