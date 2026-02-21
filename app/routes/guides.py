@@ -23,6 +23,155 @@ router = APIRouter()
 # Where screenshots will be stored on disk (relative to your app root)
 SCREENSHOT_ROOT = Path("guide_screenshots")
 
+def calculate_dpr_scale(img: Image.Image, bbox: dict) -> tuple:
+    """
+    Calculate the correct DPR scale factor for bbox coordinates.
+    
+    Returns: (dpr_scale, scaled_bbox_dict)
+    
+    Logic:
+    1. If bbox contains 'dpr' field -> use it directly
+    2. If bbox contains 'cssWidth'/'cssHeight' -> calculate from ratio
+    3. Otherwise assume DPR=1 (no scaling needed)
+    """
+    if not bbox:
+        return (1.0, bbox)
+    
+    dpr = bbox.get('dpr')
+    
+    # Method 1: DPR explicitly provided
+    if dpr is not None:
+        dpr = float(dpr)
+        scaled_bbox = {
+            'x': bbox.get('x', 0),
+            'y': bbox.get('y', 0),
+            'width': bbox.get('width', 0),
+            'height': bbox.get('height', 0),
+        }
+        print(f"[NexAura] Using explicit DPR: {dpr}")
+        return (1.0, scaled_bbox)  # Already scaled in frontend
+    
+    # Method 2: Calculate DPR from CSS vs actual dimensions
+    css_width = bbox.get('cssWidth')
+    css_height = bbox.get('cssHeight')
+    
+    if css_width is not None and css_height is not None:
+        img_width, img_height = img.size
+        
+        # Calculate DPR from width ratio
+        calculated_dpr = img_width / (css_width * 2) if css_width > 0 else 1.0
+        
+        # Use width ratio as primary (more reliable for viewport width)
+        # Standard viewport width is usually around 980-1920 CSS pixels
+        # Screenshot width = viewport_width * DPR
+        
+        # Heuristic: if image width is significantly larger than CSS width,
+        # coordinates need scaling
+        if img_width > css_width * 1.5:
+            dpr = img_width / (css_width * 2) if css_width > 0 else 1.0
+            dpr = max(1.0, min(3.0, dpr))  # Clamp to reasonable range
+            
+            # Scale the coordinates
+            scaled_bbox = {
+                'x': bbox.get('cssX', 0) * dpr,
+                'y': bbox.get('cssY', 0) * dpr,
+                'width': bbox.get('cssWidth', 0) * dpr,
+                'height': bbox.get('cssHeight', 0) * dpr,
+            }
+            print(f"[NexAura] Calculated DPR: {dpr} from image={img_width} vs css={css_width}")
+            return (1.0, scaled_bbox)
+    
+    # Method 3: Auto-detect from image size
+    # Standard screenshot sizes and their typical DPR:
+    # - 1920x1080 @ DPR=1 -> 1920px wide
+    # - 1920x1080 @ DPR=2 -> 3840px wide (Retina)
+    img_width, img_height = img.size
+    
+    # Common viewport widths
+    common_viewport_widths = [1920, 1680, 1440, 1366, 1280, 1024, 800]
+    
+    best_dpr = 1.0
+    min_diff = float('inf')
+    
+    for vw in common_viewport_widths:
+        for candidate_dpr in [1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0]:
+            expected_width = vw * candidate_dpr
+            diff = abs(img_width - expected_width)
+            if diff < min_diff:
+                min_diff = diff
+                best_dpr = candidate_dpr
+    
+    # If we detected a high DPR, scale the bbox
+    if best_dpr > 1.25:
+        scaled_bbox = {
+            'x': bbox.get('x', 0) * best_dpr,
+            'y': bbox.get('y', 0) * best_dpr,
+            'width': bbox.get('width', 0) * best_dpr,
+            'height': bbox.get('height', 0) * best_dpr,
+        }
+        print(f"[NexAura] Auto-detected DPR: {best_dpr} from image size {img_width}x{img_height}")
+        return (1.0, scaled_bbox)
+    
+    # No scaling needed
+    print(f"[NexAura] No DPR scaling needed (DPR=1 assumed)")
+    return (1.0, bbox)
+
+
+def draw_highlight_on_image(img: Image.Image, bbox: dict, dpr: float = None) -> Image.Image:
+    """
+    Draw a translucent yellow highlight rectangle on the image.
+    
+    Args:
+        img: PIL Image in RGBA mode
+        bbox: Dict with x, y, width, height (and optionally dpr, cssX, cssY, cssWidth, cssHeight)
+        dpr: Optional override for device pixel ratio
+    
+    Returns:
+        Image with highlight overlay
+    """
+    if not bbox:
+        return img
+    
+    # Get the scaled bbox
+    _, scaled_bbox = calculate_dpr_scale(img, bbox)
+    
+    x = float(scaled_bbox.get('x', 0))
+    y = float(scaled_bbox.get('y', 0))
+    width = float(scaled_bbox.get('width', 0))
+    height = float(scaled_bbox.get('height', 0))
+    
+    # Validate coordinates
+    img_width, img_height = img.size
+    if x < 0 or y < 0 or width <= 0 or height <= 0:
+        print(f"[NexAura] WARNING: Invalid bbox coordinates: ({x}, {y}, {width}, {height})")
+        return img
+    
+    if x > img_width or y > img_height:
+        print(f"[NexAura] WARNING: Bbox outside image bounds: ({x}, {y}) vs image ({img_width}, {img_height})")
+        return img
+    
+    # Clamp to image bounds
+    x = max(0, min(x, img_width - 1))
+    y = max(0, min(y, img_height - 1))
+    width = min(width, img_width - x)
+    height = min(height, img_height - y)
+    
+    print(f"[NexAura] Drawing highlight at: ({x:.2f}, {y:.2f}, {width:.2f}, {height:.2f})")
+    
+    # Create transparent overlay
+    overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
+    draw = ImageDraw.Draw(overlay)
+    
+    # Draw translucent yellow rectangle
+    draw.rectangle(
+        [x, y, x + width, y + height],
+        fill=(255, 255, 0, 80),   # Yellow with 80/255 = ~31% opacity
+        outline=(255, 200, 0, 200),  # Orange-yellow outline
+        width=3
+    )
+    
+    # Composite overlay onto original image
+    return Image.alpha_composite(img, overlay)
 
 # --- EXPORT GUIDE AS PDF (WITH IMAGES) ---
 @router.get("/{guide_id}/export-pdf")
@@ -233,7 +382,6 @@ async def search_public_guides(
 
 
 # --- CREATE GUIDE (NOW SAVES SCREENSHOTS TO DISK) ---
-# --- CREATE GUIDE (NOW SAVES SCREENSHOTS TO DISK) ---
 @router.post("/", status_code=201, response_model=Guide)
 async def create_guide(
     guide: GuideCreate,
@@ -273,20 +421,15 @@ async def create_guide(
         for i, step_data in enumerate(guide.steps):
             screenshot_path_str = None
             
-            # --- EXTRACT HIGHLIGHTS FROM TARGET ---
-            highlight_x = highlight_y = highlight_width = highlight_height = None
+            # Extract bbox from target.vision
+            bbox = None
             target_data = getattr(step_data, "target", None)
             
             if target_data and isinstance(target_data, dict):
                 vision = target_data.get("vision", {})
                 bbox = vision.get("bbox")
-                if bbox:
-                    highlight_x = float(bbox.get("x", 0))
-                    highlight_y = float(bbox.get("y", 0))
-                    highlight_width = float(bbox.get("width", 0))
-                    highlight_height = float(bbox.get("height", 0))
-
-            # Save screenshot (data URL -> file)
+            
+            # Save screenshot and draw highlight
             raw_img = getattr(step_data, "screenshot", None)
             if raw_img:
                 try:
@@ -294,41 +437,33 @@ async def create_guide(
                         _, raw_img = raw_img.split(",", 1)
                     img_bytes = base64.b64decode(raw_img)
                     img_file = guide_dir / f"step_{i+1}.png"
+                    
+                    # Save original first
                     with open(img_file, "wb") as f:
                         f.write(img_bytes)
-                        
-                    # Now open it with PIL and ensure it's RGBA
+                    
+                    # Open and process
                     img = Image.open(img_file).convert("RGBA")
-
-                    # If we successfully extracted bbox coordinates, draw the transparent highlight
-                    if highlight_x is not None and highlight_y is not None and highlight_width is not None and highlight_height is not None:
-                        
-                        # 1. CREATE A COMPLETELY TRANSPARENT OVERLAY
-                        # Must be exactly the same size and mode ("RGBA") as the base image
-                        overlay = Image.new("RGBA", img.size, (255, 255, 255, 0))
-                        draw = ImageDraw.Draw(overlay)
-
-                        # 2. Draw translucent yellow rectangle ON THE OVERLAY
-                        draw.rectangle(
-                            [
-                                highlight_x, 
-                                highlight_y, 
-                                highlight_x + highlight_width, 
-                                highlight_y + highlight_height
-                            ],
-                            fill=(255, 255, 0, 80),   # 80 alpha = translucent yellow
-                            outline=(255, 255, 0, 255),
-                            width=4
-                        )
-
-                        # 3. COMPOSITE (BLEND) THE OVERLAY OVER THE ORIGINAL IMAGE
-                        img = Image.alpha_composite(img, overlay)
-
-                    # Save modified screenshot (overwrite original)
+                    print(f"[NexAura] Step {i+1}: Image size = {img.size}")
+                    
+                    if bbox:
+                        print(f"[NexAura] Step {i+1}: Original bbox = {bbox}")
+                        img = draw_highlight_on_image(img, bbox)
+                    
+                    # Save with highlight
                     img.save(img_file, format="PNG")
                     screenshot_path_str = str(img_file)
+                    
                 except Exception as e:
-                    print(f"Error saving screenshot for step {i+1}: {e}")
+                    print(f"[NexAura] Error processing screenshot for step {i+1}: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # Extract coordinates for DB storage (store original, not scaled)
+            highlight_x = float(bbox.get('x', 0)) if bbox else None
+            highlight_y = float(bbox.get('y', 0)) if bbox else None
+            highlight_width = float(bbox.get('width', 0)) if bbox else None
+            highlight_height = float(bbox.get('height', 0)) if bbox else None
 
             # Save step to DB
             db_step = models.Step(
@@ -352,20 +487,18 @@ async def create_guide(
         db.commit()
         db.refresh(db_guide)
 
-        # Persist rich step metadata separately (does not touch DB schema)
+        # Persist rich step metadata
         try:
             rich_file = guide_dir / "rich_steps.json"
             with open(rich_file, "w", encoding="utf-8") as f:
                 json.dump(rich_steps_payload, f)
         except Exception as e:
-            print("Warning: failed to persist rich step metadata", e)
+            print("[NexAura] Warning: failed to persist rich step metadata", e)
 
-        # Hydrate rich fields back into response so caller gets full data immediately
+        # Hydrate rich fields
         try:
             for step in db_guide.steps or []:
-                payload = rich_steps_payload.get(step.step_number) or rich_steps_payload.get(
-                    str(step.step_number)
-                )
+                payload = rich_steps_payload.get(step.step_number) or rich_steps_payload.get(str(step.step_number))
                 if not payload:
                     continue
                 if "action" in payload:
@@ -373,13 +506,12 @@ async def create_guide(
                 if "target" in payload:
                     step.target = payload.get("target")
         except Exception as e:
-            print("Warning: failed to hydrate rich step metadata into response", e)
+            print("[NexAura] Warning: failed to hydrate rich step metadata", e)
             
         return db_guide
 
     except Exception as e:
         db.rollback()
-        # Avoid concatenating objects with strings — format safely:
         raise HTTPException(status_code=400, detail=f"Error creating guide: {e}")
 
 
