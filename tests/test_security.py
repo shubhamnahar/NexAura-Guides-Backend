@@ -3,7 +3,7 @@ import pytest
 
 # Mock environment variables before importing app.auth
 os.environ["SECRET_KEY"] = "test_secret_key"
-os.environ["DATABASE_URL"] = "postgresql://user:pass@localhost:5432/db"
+os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 
 from app.auth import get_password_hash, verify_password, _prepare_password
 

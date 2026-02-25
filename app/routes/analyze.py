@@ -1,14 +1,14 @@
 import os
 import base64
 import tempfile
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from app.services.llm_service import plan_actions
 from app.services.ocr_service import run_ocr
 from app.services.vision_service import analyze_ui
 from pydantic import BaseModel
 from PIL import Image
 from io import BytesIO
-from PIL import Image
+from .. import auth, models
 
 router = APIRouter()
 
@@ -16,7 +16,8 @@ router = APIRouter()
 @router.post("/analyze")
 async def analyze_screen_file(
     file: UploadFile = File(...),
-    question: str = Form(...)
+    question: str = Form(...),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     """
     Endpoint that:
@@ -28,7 +29,8 @@ async def analyze_screen_file(
     tmp_path = None
     try:
         # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
+        # Security Enhancement: Use a hardcoded .png suffix to avoid processing arbitrary user-supplied extensions
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
@@ -72,7 +74,10 @@ class AnalyzeLiveRequest(BaseModel):
 
 
 @router.post("/analyze_live")
-async def analyze_live(req: AnalyzeLiveRequest):
+async def analyze_live(
+    req: AnalyzeLiveRequest,
+    current_user: models.User = Depends(auth.get_current_user)
+):
     tmp_path = None
     try:
         image_data = req.image_base64.split(",")[-1]
