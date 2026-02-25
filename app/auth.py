@@ -11,7 +11,9 @@ import bcrypt
 from . import models, database
 
 # --- Config ---
-SECRET_KEY = os.getenv("SECRET_KEY", "your_fallback_secret_key_here")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY environment variable is not set")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -35,12 +37,15 @@ def verify_password(plain_password, hashed_password):
     if hashed_password is None:
         return False
     return bcrypt.checkpw(
-        plain_password.encode("utf-8"),
+        _prepare_password(plain_password).encode("utf-8"),
         hashed_password.encode("utf-8"),
     )
 
 def get_password_hash(password):
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    return bcrypt.hashpw(
+        _prepare_password(password).encode("utf-8"),
+        bcrypt.gensalt()
+    ).decode("utf-8")
 
 # --- JWT Token Functions ---
 def create_access_token(data: dict, expires_delta: timedelta | None = None):

@@ -9,20 +9,21 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
-# --- THIS IS THE FIX ---
-# Change the origins list to ["*"] to allow
-# your extension to work on any website.
+# --- SECURITY FIX ---
+# Insecure CORS configuration: allow_origins=["*"] with allow_credentials=True
+# is not allowed by browsers and is a security risk.
+# For browser extensions, we can use allow_origin_regex.
 origins = [
-    "http://localhost:3000", # Good for development
-    "*"                      # Allow all origins (for your extension)
+    "http://localhost:3000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Use the updated list
+    allow_origins=origins,
+    allow_origin_regex="chrome-extension://.*",
     allow_credentials=True,
-    allow_methods=["*"],  # Allow all methods (GET, POST, etc.)
-    allow_headers=["*"],  # Allow all headers (like Authorization)
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 # -----------------------
 

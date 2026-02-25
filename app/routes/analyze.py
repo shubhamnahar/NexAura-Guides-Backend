@@ -56,7 +56,9 @@ async def analyze_screen_file(
         }
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Avoid leaking internal error details
+        print(f"Error in analyze_screen_file: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during screen analysis")
 
     finally:
         if tmp_path and os.path.exists(tmp_path):
@@ -100,8 +102,9 @@ async def analyze_live(req: AnalyzeLiveRequest):
         }
 
     except Exception as e:
-        print("Error in analyze_live:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        # Avoid leaking internal error details
+        print(f"Error in analyze_live: {e}")
+        raise HTTPException(status_code=500, detail="An error occurred during live analysis")
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)

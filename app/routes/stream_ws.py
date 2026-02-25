@@ -1,7 +1,10 @@
 # app/routes/stream_ws.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
 import base64
 import tempfile
+import json
+from jose import JWTError, jwt
+from ..auth import SECRET_KEY, ALGORITHM
 from app.services.ocr_service import run_ocr
 from app.services.vision_service import analyze_ui
 from app.services.llm_service import plan_actions
@@ -9,12 +12,25 @@ from app.services.llm_service import plan_actions
 router = APIRouter()
 
 @router.websocket("/screen")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
+    if token is None:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except JWTError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     await websocket.accept()
     try:
         while True:
             data = await websocket.receive_text()  # expects JSON with base64 image and question
-            import json
             payload = json.loads(data)
             b64 = payload.get("image")
             question = payload.get("question", "")

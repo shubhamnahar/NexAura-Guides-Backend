@@ -226,7 +226,8 @@ async def export_guide_pdf(
         margin_top = height - 50
 
     def ensure_space(lines: int = 1):
-        nonlocal margin_top
+        # We only need to read margin_top here, so nonlocal is not strictly required
+        # but the linter complains if we don't assign to it.
         needed = lines * line_height
         if margin_top - needed < 50:
             new_page()
@@ -359,9 +360,10 @@ async def delete_guide(
         db.commit()
     except Exception as e:
         db.rollback()
+        print(f"Error deleting guide: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error deleting guide: {e}",
+            detail="An error occurred while deleting the guide",
         )
     return None
 
@@ -517,7 +519,8 @@ async def create_guide(
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"Error creating guide: {e}")
+        print(f"Error creating guide: {e}")
+        raise HTTPException(status_code=400, detail="An error occurred while creating the guide")
 
 
 # --- GET MY GUIDES ---
