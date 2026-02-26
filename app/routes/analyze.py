@@ -1,7 +1,7 @@
 import os
 import base64
 import tempfile
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from fastapi.responses import JSONResponse, PlainTextResponse
 from app.services.llm_service import plan_actions
 from app.services.ocr_service import run_ocr
@@ -10,12 +10,15 @@ from pydantic import BaseModel
 from PIL import Image
 from io import BytesIO
 
+from .. import auth, models
+
 router = APIRouter()
 
 @router.post("/analyze")
 async def analyze_screen_file(
     file: UploadFile = File(...),
-    question: str = Form(...)
+    question: str = Form(...),
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     """
     Standard analysis endpoint for uploaded files (Keeping this unchanged)
@@ -62,7 +65,10 @@ class AnalyzeLiveRequest(BaseModel):
     question: str
 
 @router.post("/analyze_live")
-async def analyze_live(req: AnalyzeLiveRequest):
+async def analyze_live(
+    req: AnalyzeLiveRequest,
+    current_user: models.User = Depends(auth.get_current_user)
+):
     tmp_path = None
     try:
         # Decode image
