@@ -2,18 +2,17 @@ import os
 import base64
 import tempfile
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi.responses import JSONResponse, PlainTextResponse
 from app.services.llm_service import plan_actions
 from app.services.ocr_service import run_ocr
 from app.services.vision_service import analyze_ui
 from pydantic import BaseModel
 from PIL import Image
 from io import BytesIO
-from PIL import Image
 
 from .. import auth, models
 
 router = APIRouter()
-
 
 @router.post("/analyze")
 async def analyze_screen_file(
@@ -22,32 +21,24 @@ async def analyze_screen_file(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """
-    Endpoint that:
-    1. Accepts a screenshot (image)
-    2. Accepts a user question about the interface
-    3. Runs OCR + Vision analysis
-    4. Passes data + question to LLM for step planning
+    Standard analysis endpoint for uploaded files (Keeping this unchanged)
     """
     tmp_path = None
     try:
-        # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             tmp.write(await file.read())
             tmp_path = tmp.name
 
-        # OCR + Vision
         ocr_items = run_ocr(tmp_path)
         vision = analyze_ui(tmp_path)
         result = plan_actions(vision, ocr_items, question)
 
-        # Load image for metadata
         with Image.open(tmp_path) as img:
             width, height = img.size
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             image_base64 = base64.b64encode(buffered.getvalue()).decode()
 
-        # Return combined response
         return {
             "success": True,
             "result": {
@@ -73,7 +64,6 @@ class AnalyzeLiveRequest(BaseModel):
     image_base64: str
     question: str
 
-
 @router.post("/analyze_live")
 async def analyze_live(
     req: AnalyzeLiveRequest,
@@ -81,6 +71,7 @@ async def analyze_live(
 ):
     tmp_path = None
     try:
+        # Decode image
         image_data = req.image_base64.split(",")[-1]
         image_bytes = base64.b64decode(image_data)
 
@@ -88,24 +79,21 @@ async def analyze_live(
             tmp.write(image_bytes)
             tmp_path = tmp.name
 
-        # Get image dimensions
-        img = Image.open(tmp_path)
-        width, height = img.size
-
+        # Run Analysis
         ocr_items = run_ocr(tmp_path)
         vision = analyze_ui(tmp_path)
         result = plan_actions(vision, ocr_items, req.question)
 
-        # 🆕 Add image data for frontend alignment
-        return {
-            "success": True,
-            "result": {
-                **result,
-                "image_base64": req.image_base64,
-                "image_width": width,
-                "image_height": height
-            }
-        }
+        steps = result.get("steps", [])
+        
+        # Format the list into a single string with newlines
+        if isinstance(steps, list) and steps:
+            formatted_text = "\n".join([f"{i+1}. {step}" for i, step in enumerate(steps)])
+        else:
+            formatted_text = result.get("text", "Sorry, I couldn't find any steps.")
+
+        # 🆕 RETURN RAW TEXT: No JSON structure, just the string.
+        return JSONResponse(content=formatted_text)
 
     except Exception as e:
         # Avoid leaking internal error details

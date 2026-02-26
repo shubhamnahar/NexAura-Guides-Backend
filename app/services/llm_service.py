@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import openai
 from dotenv import load_dotenv
@@ -12,7 +11,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 SYSTEM_PROMPT = """
 You are an assistant that reads a description of a user interface and provides a concise sequence of steps
-to accomplish the user's requested task. Return JSON with fields:
+to accomplish the user's requested task. Return a JSON object with fields:
 - steps: list of human-friendly steps
 - highlights: optional list of regions {x,y,w,h,reason}
 Instructions for steps:
@@ -20,10 +19,8 @@ Instructions for steps:
 - Be concise and actionable
 """
 
-
-
 def plan_actions(vision, ocr_items, user_question: str):
-    prompt = SYSTEM_PROMPT + "\n\n" + json.dumps({
+    prompt = json.dumps({
         "vision": vision,
         "ocr_items": ocr_items,
         "user_question": user_question
@@ -31,17 +28,21 @@ def plan_actions(vision, ocr_items, user_question: str):
 
     resp = openai.chat.completions.create(
         model="gpt-4o",
+        response_format={ "type": "json_object" }, # <--- FORCES CLEAN JSON
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": prompt}
         ],
         max_tokens=600
     )
+    
     text = resp.choices[0].message.content
+    
     try:
+        # Since we forced JSON mode, this will parse perfectly every time
         result = json.loads(text)
-    except Exception:
-        result = {"text": text}
+    except Exception as e:
+        print(f"Failed to parse LLM response: {e}")
+        result = {"steps": ["Sorry, I couldn't generate the steps. Please try again."]}
+        
     return result
-
-
