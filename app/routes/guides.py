@@ -372,19 +372,16 @@ async def delete_guide(
 async def search_public_guides(
     search: str = "", db: Session = Depends(database.get_db)
 ):
+    query = db.query(models.Guide).filter(models.Guide.is_public == True)
     if search:
         search_term = f"%{search}%"
-        return (
-            db.query(models.Guide)
-            .filter(
-                or_(
-                    models.Guide.name.ilike(search_term),
-                    models.Guide.description.ilike(search_term),
-                )
+        query = query.filter(
+            or_(
+                models.Guide.name.ilike(search_term),
+                models.Guide.description.ilike(search_term),
             )
-            .all()
         )
-    return db.query(models.Guide).all()
+    return query.all()
 
 
 # --- CREATE GUIDE (NOW SAVES SCREENSHOTS TO DISK) ---
@@ -414,6 +411,7 @@ async def create_guide(
             name=guide.name,
             shortcut=guide.shortcut,
             description=guide.description,
+            is_public=guide.is_public,
             owner_id=current_user.id,
         )
         db.add(db_guide)
