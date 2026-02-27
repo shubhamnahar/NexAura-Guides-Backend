@@ -1,5 +1,5 @@
 # app/models.py
-from sqlalchemy import Column, Integer, String, ForeignKey, Text ,Float
+from sqlalchemy import Column, Integer, String, ForeignKey, Text ,Float, Boolean
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -18,6 +18,7 @@ class Guide(Base):
     name = Column(String, index=True, nullable=False)
     shortcut = Column(String, index=True, unique=True, nullable=False)
     description = Column(Text, nullable=False)
+    is_public = Column(Boolean, default=False)
     owner_id = Column(Integer, ForeignKey("users.id"))
 
     owner = relationship("User", back_populates="guides")

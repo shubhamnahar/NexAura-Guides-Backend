@@ -71,6 +71,7 @@ class GuideCreate(GuideBase):
     name: str
     shortcut: str
     description: Optional[str] = None
+    is_public: bool = False
     steps: List[StepCreate] = []
 
 class Guide(GuideBase):
@@ -78,6 +79,7 @@ class Guide(GuideBase):
     name: str
     shortcut: str
     description: Optional[str] = None
+    is_public: bool = False
     steps: List[Step] = []
 
     class Config:
