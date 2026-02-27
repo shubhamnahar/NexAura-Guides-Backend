@@ -1,5 +1,5 @@
 # app/routes/guides.py
-from fastapi import APIRouter, Depends, HTTPException, status,Request
+from fastapi import APIRouter, Depends, HTTPException, status,Request,Query,BackgroundTasks
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -17,7 +17,6 @@ from reportlab.pdfgen import canvas
 from .. import database, models, auth
 from ..schemas import GuideCreate, Guide
 import json
-from fastapi import BackgroundTasks
 
 router = APIRouter()
 
@@ -529,6 +528,7 @@ async def get_user_guides(
     db: Session = Depends(database.get_db),
     current_user: models.User = Depends(auth.get_current_user),
 ):
+    print(f"Fetching guides for user_id={current_user.id}")
     user = (
         db.query(models.User)
         .filter(models.User.id == current_user.id)
@@ -542,7 +542,36 @@ async def get_user_guides(
                 g.steps = enriched
         except Exception:
             continue
+    print("guides--------"+str(guides))
     return guides
+
+@router.get("/search", response_model=Guide)
+async def get_guide_by_shortcut(
+    shortcut: str = Query(..., description="The shortcut of the guide to find"),
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    # Query database directly for the specific guide belonging to this user
+    guide = (
+        db.query(models.Guide)
+        .filter(models.Guide.owner_id == current_user.id)
+        .filter(models.Guide.shortcut == shortcut)
+        .first()
+    )
+
+    # If the guide doesn't exist, return a 404 error
+    if not guide:
+        raise HTTPException(status_code=404, detail="Guide not found")
+
+    # Hydrate steps just like the main endpoint
+    try:
+        enriched = hydrate_rich_steps(guide)
+        if enriched:
+            guide.steps = enriched
+    except Exception as e:
+        print(f"Error hydrating steps for specific guide: {e}")
+
+    return guide
 
 
 def hydrate_rich_steps(guide: models.Guide):
