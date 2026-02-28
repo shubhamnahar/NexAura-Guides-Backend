@@ -45,7 +45,6 @@ class Step(BaseModel):
     step_number: int
     instruction: str
     selector: str | None = None
-    screenshot_path: str | None = None
 
     highlight_x: float | None = None
     highlight_y: float | None = None
@@ -53,8 +52,6 @@ class Step(BaseModel):
     highlight_height: float | None = None
     action: Optional[str] = None
     target: Optional[Any] = None
-    # we expose path as-is for now; you can later convert to URL if you want
-    screenshot_path: Optional[str] = None
 
     class Config:
         orm_mode = True

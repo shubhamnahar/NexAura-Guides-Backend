@@ -3,6 +3,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, status
 import base64
 import tempfile
 import json
+import os
 from jose import JWTError, jwt
 from ..auth import SECRET_KEY, ALGORITHM
 from app.services.ocr_service import run_ocr
@@ -31,28 +32,41 @@ async def websocket_endpoint(websocket: WebSocket, token: str = Query(None)):
     try:
         while True:
             data = await websocket.receive_text()  # expects JSON with base64 image and question
-            payload = json.loads(data)
+            try:
+                payload = json.loads(data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({"error": "invalid json"}))
+                continue
+
             b64 = payload.get("image")
             question = payload.get("question", "")
             if not b64:
                 await websocket.send_text(json.dumps({"error":"no image"}))
                 continue
 
-            # decode
-            header, b64data = (b64.split(",", 1) if "," in b64 else (None, b64))
-            img_bytes = base64.b64decode(b64data)
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
-                tf.write(img_bytes)
-                tmp_path = tf.name
+            tmp_path = None
+            try:
+                # decode
+                header, b64data = (b64.split(",", 1) if "," in b64 else (None, b64))
+                img_bytes = base64.b64decode(b64data)
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tf:
+                    tmp_path = tf.name
+                    tf.write(img_bytes)
 
-            ocr_items = run_ocr(tmp_path)
-            vision = analyze_ui(tmp_path)
-            llm_response = plan_actions(vision, ocr_items, question)
+                ocr_items = run_ocr(tmp_path)
+                vision = analyze_ui(tmp_path)
+                llm_response = plan_actions(vision, ocr_items, question)
 
-            await websocket.send_text(json.dumps({
-                "ocr": ocr_items,
-                "vision": vision,
-                "llm": llm_response
-            }))
+                await websocket.send_text(json.dumps({
+                    "ocr": ocr_items,
+                    "vision": vision,
+                    "llm": llm_response
+                }))
+            except Exception as e:
+                print(f"Error processing frame: {e}")
+                await websocket.send_text(json.dumps({"error": "processing failed"}))
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    os.remove(tmp_path)
     except WebSocketDisconnect:
         print("client disconnected")
