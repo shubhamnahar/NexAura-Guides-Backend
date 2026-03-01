@@ -12,3 +12,8 @@
 **Vulnerability:** The WebSocket endpoint for live screen analysis created temporary files without deleting them, leading to a potential Denial of Service (DoS) via disk exhaustion. Additionally, internal server file paths were exposed via Pydantic schemas.
 **Learning:** Resource management in long-running connections (like WebSockets) is critical; always use `try...finally` to ensure cleanup.
 **Prevention:** Audit all uses of `tempfile` for missing cleanup, and ensure Pydantic schemas do not leak sensitive internal metadata like file paths.
+
+## 2025-10-26 - [Guide Screenshot Disk Leak]
+**Vulnerability:** Screenshots saved to disk were not deleted when a guide was removed or when its steps were updated, leading to a potential Denial of Service (DoS) via disk exhaustion.
+**Learning:** Manual file management (outside the database) requires explicit cleanup hooks in all life-cycle endpoints (DELETE and PUT).
+**Prevention:** Ensure any endpoint that modifies or deletes a database record also cleans up associated external resources (files, cloud storage, etc.). Use shared helper functions like `process_steps_and_save_screenshots` to centralize cleanup logic during updates.

@@ -11,6 +11,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 import re
 import secrets
+import shutil
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -361,8 +362,18 @@ async def delete_guide(
         )
 
     try:
+        # 1. Store the guide_id for cleanup after commit
+        guide_id_to_delete = db_guide.id
+
+        # 2. Delete from database
         db.delete(db_guide)
         db.commit()
+
+        # 3. Clean up screenshots on disk
+        guide_dir = SCREENSHOT_ROOT / f"guide_{guide_id_to_delete}"
+        if guide_dir.exists() and guide_dir.is_dir():
+            shutil.rmtree(guide_dir)
+
     except Exception as e:
         db.rollback()
         print(f"Error deleting guide: {e}")
@@ -718,10 +729,13 @@ def set_guide_access(db: Session, guide_id: int, emails: List[str]):
         db.add(access)
 
 def process_steps_and_save_screenshots(db: Session, db_guide: models.Guide, steps_data: List[Any]):
-    # 1. Clear existing steps
+    # 1. Clear existing steps from DB
     db.query(models.Step).filter(models.Step.guide_id == db_guide.id).delete()
 
+    # 2. Clear and recreate screenshot directory to avoid disk leak
     guide_dir = SCREENSHOT_ROOT / f"guide_{db_guide.id}"
+    if guide_dir.exists():
+        shutil.rmtree(guide_dir)
     guide_dir.mkdir(parents=True, exist_ok=True)
 
     rich_steps_payload: Dict[int, Dict[str, Any]] = {}
