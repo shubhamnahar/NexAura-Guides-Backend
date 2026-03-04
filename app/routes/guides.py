@@ -7,6 +7,7 @@ from typing import List, Dict, Any
 from io import BytesIO
 import base64
 import os
+import shutil
 from pathlib import Path
 from PIL import Image, ImageDraw
 import re
@@ -363,6 +364,9 @@ async def delete_guide(
     try:
         db.delete(db_guide)
         db.commit()
+        # Cleanup screenshot directory on successful deletion
+        guide_dir = SCREENSHOT_ROOT / f"guide_{guide_id}"
+        shutil.rmtree(guide_dir, ignore_errors=True)
     except Exception as e:
         db.rollback()
         print(f"Error deleting guide: {e}")
@@ -722,6 +726,8 @@ def process_steps_and_save_screenshots(db: Session, db_guide: models.Guide, step
     db.query(models.Step).filter(models.Step.guide_id == db_guide.id).delete()
 
     guide_dir = SCREENSHOT_ROOT / f"guide_{db_guide.id}"
+    # Cleanup old screenshots to avoid orphaned files
+    shutil.rmtree(guide_dir, ignore_errors=True)
     guide_dir.mkdir(parents=True, exist_ok=True)
 
     rich_steps_payload: Dict[int, Dict[str, Any]] = {}
