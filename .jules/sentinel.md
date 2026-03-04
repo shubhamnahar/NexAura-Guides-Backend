@@ -12,3 +12,8 @@
 **Vulnerability:** The WebSocket endpoint for live screen analysis created temporary files without deleting them, leading to a potential Denial of Service (DoS) via disk exhaustion. Additionally, internal server file paths were exposed via Pydantic schemas.
 **Learning:** Resource management in long-running connections (like WebSockets) is critical; always use `try...finally` to ensure cleanup.
 **Prevention:** Audit all uses of `tempfile` for missing cleanup, and ensure Pydantic schemas do not leak sensitive internal metadata like file paths.
+
+## 2025-10-26 - [Orphaned Guide Screenshots Data Leak & DoS]
+**Vulnerability:** Screenshots associated with guides were not deleted from the filesystem when a guide was deleted or when steps were updated, leading to a potential Denial of Service (DoS) via disk exhaustion and unnecessary data lingering (data remnants).
+**Learning:** In applications that store binary assets on disk alongside database records, the asset lifecycle must be explicitly managed to match the record lifecycle.
+**Prevention:** Use `shutil.rmtree` or similar cleanup logic in both deletion routes and update routes that replace assets.
